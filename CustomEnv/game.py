@@ -3,14 +3,23 @@ import cv2
 import random
 from gym import Env, spaces
 
+from CustomEnv.objects import FireBall, Carrot, Pegasus
+
 font = cv2.FONT_HERSHEY_SIMPLEX
 
 
-class PegasusScape(Env):
+class PegasusEnv(Env):
     def __init__(self):
-        super(PegasusScape, self).__init__()
+        super(PegasusEnv, self).__init__()
+
+        self.pegasus = None
+        self.carrot_count_spawned = 0
+        self.fire_count = None
+        self.ep_return = None
+        self.energy_left = None
 
         # Define a 2-D observation space
+
         self.observation_shape = (600, 800, 3)
         self.observation_space = spaces.Box(low=np.zeros(self.observation_shape),
                                             high=np.ones(self.observation_shape),
@@ -41,7 +50,6 @@ class PegasusScape(Env):
 
         # Reset the reward
         self.ep_return = 0
-
         self.fire_count = 0
         self.energy_count = 0
 
@@ -81,7 +89,6 @@ class PegasusScape(Env):
         self.canvas = cv2.putText(self.canvas, text, (10, 20), font, 0.8, (0, 0, 0), 1, cv2.LINE_AA)
 
         # Check if the pegasus has taken a carrot
-        # if self.energy_count > 0:
         carrot_text = 'Carrots Eaten: {}'.format(self.carrots_count)
         self.canvas = cv2.putText(self.canvas, carrot_text, (10, 50), font, 0.8, (0, 0, 0), 1, cv2.LINE_AA)
 
@@ -101,11 +108,11 @@ class PegasusScape(Env):
 
     def render(self, mode="human"):
         assert mode in ["human", "rgb_array"], "Invalid mode, must be either \"human\" or \"rgb_array\""
-        
+
         if mode == "human":
             cv2.imshow("Game", self.canvas)
             cv2.waitKey(10)
-            
+
             if self.energy_left == 0 or self.pegasus not in self.elements or self.carrots_count == 3:
                 cv2.waitKey(0)  # Wait for a key press to close the window
 
@@ -115,10 +122,12 @@ class PegasusScape(Env):
     def close(self):
         cv2.destroyAllWindows()
 
-    def get_action_meanings(self):
+    @staticmethod
+    def get_action_meanings():
         return {0: "Right", 1: "Left", 2: "Down", 3: "Up", 4: "Do Nothing"}
 
-    def has_collided(self, elem1, elem2):
+    @staticmethod
+    def has_collided(elem1, elem2):
         x_col = False
         y_col = False
 
@@ -180,9 +189,9 @@ class PegasusScape(Env):
         # Spawn a carrot at the bottom edge with prob 0.01
         if random.random() < 0.03:
             # Spawn a carrot
-            spawned_carrot = Carrot("carrot_{}".format(self.energy_count),
+            spawned_carrot = Carrot("carrot_{}".format(self.carrot_count_spawned),
                                     self.x_max, self.x_min, self.y_max, self.y_min)
-            self.energy_count += 1
+            self.carrot_count_spawned += 1
 
             # Compute the x,y co-ordinates of the position from where the energy tank has to be spawned
             # Horizontally, the position is randomly chosen from the list of permissible values and
@@ -191,10 +200,9 @@ class PegasusScape(Env):
             energy_y = self.y_max
             spawned_carrot.set_position(energy_x, energy_y)
 
-            # Append the spawned energy tank to the elemetns currently present in the Env.
+            # Append the spawned energy tank to the elements currently present in the Env.
             self.elements.append(spawned_carrot)
 
-        # For elements in the Ev
         for elem in self.elements:
             if isinstance(elem, FireBall):
                 # If the fire has reached the left edge, remove it from the Env
@@ -206,7 +214,6 @@ class PegasusScape(Env):
 
                 # If the fire has collided.
                 if self.has_collided(self.pegasus, elem):
-                    # Conclude the episode and remove the pegasus from the Env.
                     done = True
                     reward = -10
                     self.elements.remove(self.pegasus)
@@ -235,73 +242,16 @@ class PegasusScape(Env):
         # Increment the episodic return
         self.ep_return += 1
 
-        # Draw elements on the canvas
         self.draw_elements_on_canvas()
 
-        # If out of energy, end the episode.
         if self.energy_left == 0:
             done = True
 
         return self.canvas, reward, done, []
 
 
-class Point(object):
-    def __init__(self, name, x_max, x_min, y_max, y_min):
-        self.x = 0
-        self.y = 0
-        self.x_min = x_min
-        self.x_max = x_max
-        self.y_min = y_min
-        self.y_max = y_max
-        self.name = name
-
-    def set_position(self, x, y):
-        self.x = self.clamp(x, self.x_min, self.x_max - self.icon_w)
-        self.y = self.clamp(y, self.y_min, self.y_max - self.icon_h)
-
-    def get_position(self):
-        return (self.x, self.y)
-
-    def move(self, del_x, del_y):
-        self.x += del_x
-        self.y += del_y
-
-        self.x = self.clamp(self.x, self.x_min, self.x_max - self.icon_w)
-        self.y = self.clamp(self.y, self.y_min, self.y_max - self.icon_h)
-
-    def clamp(self, n, minn, maxn):
-        return max(min(maxn, n), minn)
-
-
-class Pegasus(Point):
-    def __init__(self, name, x_max, x_min, y_max, y_min):
-        super(Pegasus, self).__init__(name, x_max, x_min, y_max, y_min)
-        self.icon = cv2.imread("pegasus1.png") / 255.0
-        self.icon_w = 128
-        self.icon_h = 128
-        self.icon = cv2.resize(self.icon, (self.icon_h, self.icon_w))
-
-
-class FireBall(Point):
-    def __init__(self, name, x_max, x_min, y_max, y_min):
-        super(FireBall, self).__init__(name, x_max, x_min, y_max, y_min)
-        self.icon = cv2.imread("fireball.png") / 255.0
-        self.icon_w = 64
-        self.icon_h = 64
-        self.icon = cv2.resize(self.icon, (self.icon_h, self.icon_w))
-
-
-class Carrot(Point):
-    def __init__(self, name, x_max, x_min, y_max, y_min):
-        super(Carrot, self).__init__(name, x_max, x_min, y_max, y_min)
-        self.icon = cv2.imread("carrot.png") / 255.0
-        self.icon_w = 64
-        self.icon_h = 64
-        self.icon = cv2.resize(self.icon, (self.icon_h, self.icon_w))
-
-
 if __name__ == "__main__":
-    env = PegasusScape()
+    env = PegasusEnv()
     obs = env.reset()
 
     while True:
