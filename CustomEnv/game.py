@@ -12,6 +12,7 @@ class PegasusEnv(Env):
     def __init__(self):
         super(PegasusEnv, self).__init__()
 
+        self.energy_count = None
         self.pegasus = None
         self.carrot_count_spawned = 0
         self.fire_count = None
@@ -26,7 +27,7 @@ class PegasusEnv(Env):
                                             dtype=np.float16)
 
         # Define an action space ranging from 0 to 4
-        self.action_space = spaces.Discrete(6, )
+        self.action_space = spaces.Discrete(5, )
 
         # Create a canvas to render the environment images upon
         self.canvas = np.ones(self.observation_shape) * 1
@@ -34,7 +35,6 @@ class PegasusEnv(Env):
         # Define elements present inside the environment
         self.elements = []
 
-        # Maximum energy pegasus can take at once
         self.max_energy = 1000
         self.carrots_count = 0
 
@@ -45,10 +45,7 @@ class PegasusEnv(Env):
         self.x_max = self.observation_shape[1]
 
     def reset(self):
-        # Reset the energy consumed
         self.energy_left = self.max_energy
-
-        # Reset the reward
         self.ep_return = 0
         self.fire_count = 0
         self.energy_count = 0
@@ -67,25 +64,20 @@ class PegasusEnv(Env):
         # Reset the Canvas
         self.canvas = np.ones(self.observation_shape) * 1
 
-        # Draw elements on the canvas
         self.draw_elements_on_canvas()
 
-        # return the observation
         return self.canvas
 
     def draw_elements_on_canvas(self):
         # Init the canvas
         self.canvas = np.ones(self.observation_shape) * 1
 
-        # Draw the pegasus on canvas
         for elem in self.elements:
             elem_shape = elem.icon.shape
             x, y = elem.x, elem.y
             self.canvas[y: y + elem_shape[1], x:x + elem_shape[0]] = elem.icon
 
         text = 'Energy Left: {} | Rewards: {}'.format(self.energy_left, self.ep_return)
-
-        # Put the info on canvas
         self.canvas = cv2.putText(self.canvas, text, (10, 20), font, 0.8, (0, 0, 0), 1, cv2.LINE_AA)
 
         # Check if the pegasus has taken a carrot
@@ -101,7 +93,6 @@ class PegasusEnv(Env):
 
         # Check if the Pegasus has eaten three carrots and won the game
         if self.carrots_count == 3:
-            # self.elements.remove(self.pegasus)
             self.canvas = cv2.putText(self.canvas, "Game Won!",
                                       (self.observation_shape[1] // 2 - 50, self.observation_shape[0] // 2),
                                       font, 1, (0, 255, 0), 2, cv2.LINE_AA)
@@ -146,16 +137,12 @@ class PegasusEnv(Env):
         return False
 
     def step(self, action):
-        # Flag that marks the termination of an episode
         done = False
 
         # Assert that it is a valid action
         assert self.action_space.contains(action), "Invalid Action"
 
-        # Decrease the energy counter
         self.energy_left -= 1
-
-        # Reward for executing a step.
         reward = 0
 
         # apply the action to the pegasus
@@ -170,9 +157,8 @@ class PegasusEnv(Env):
         elif action == 4:
             self.pegasus.move(0, 0)
 
-        # Spawn a fire at the right edge with prob 0.01
+        # Spawn a fire at the right edge with prob 0.009
         if random.random() < 0.009:
-            # Spawn a fire
             spawned_fire = FireBall("fire_{}".format(self.fire_count), self.x_max, self.x_min, self.y_max, self.y_min)
             self.fire_count += 1
 
@@ -182,13 +168,10 @@ class PegasusEnv(Env):
             fire_x = self.x_max
             fire_y = random.randrange(self.y_min, self.y_max)
             spawned_fire.set_position(fire_x, fire_y)
-
-            # Append the spawned fire to the elements currently present in Env.
             self.elements.append(spawned_fire)
 
-        # Spawn a carrot at the bottom edge with prob 0.01
+        # Spawn a carrot at the bottom edge with probability
         if random.random() < 0.03:
-            # Spawn a carrot
             spawned_carrot = Carrot("carrot_{}".format(self.carrot_count_spawned),
                                     self.x_max, self.x_min, self.y_max, self.y_min)
             self.carrot_count_spawned += 1
@@ -199,8 +182,6 @@ class PegasusEnv(Env):
             energy_x = random.randrange(self.x_min, self.x_max)
             energy_y = self.y_max
             spawned_carrot.set_position(energy_x, energy_y)
-
-            # Append the spawned energy tank to the elements currently present in the Env.
             self.elements.append(spawned_carrot)
 
         for elem in self.elements:
@@ -236,12 +217,9 @@ class PegasusEnv(Env):
                     if self.carrots_count == 3:
                         done = True
 
-                    # Fill the energy of the pegasus to full.
-                    self.energy_left = self.max_energy
+                    self.energy_left += 100
 
-        # Increment the episodic return
         self.ep_return += 1
-
         self.draw_elements_on_canvas()
 
         if self.energy_left == 0:
@@ -259,7 +237,6 @@ if __name__ == "__main__":
         action = env.action_space.sample()
         obs, reward, done, info = env.step(action)
 
-        # Render the game
         env.render()
         if done:
             break
