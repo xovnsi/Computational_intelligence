@@ -27,6 +27,7 @@ class PegasusScape(Env):
 
         # Maximum energy pegasus can take at once
         self.max_energy = 1000
+        self.carrots_eaten = 0
 
         # Permissible area of pegasus to be
         self.y_min = int(self.observation_shape[0] * 0.1)
@@ -79,11 +80,25 @@ class PegasusScape(Env):
         # Put the info on canvas
         self.canvas = cv2.putText(self.canvas, text, (10, 20), font, 0.8, (0, 0, 0), 1, cv2.LINE_AA)
 
+        # Check if the pegasus has taken a carrot
+        if self.energy_count > 0:
+            carrot_text = 'Carrots Eaten: {}'.format(self.carrots_eaten)
+            self.canvas = cv2.putText(self.canvas, carrot_text, (10, 50), font, 0.8, (0, 0, 0), 1, cv2.LINE_AA)
+
+        # Check if the game has ended
+        if self.energy_left == 0 or self.pegasus not in self.elements:
+            end_text = 'Game Over'
+            self.canvas = cv2.putText(self.canvas, end_text,
+                                      (self.observation_shape[1] // 2 - 50, self.observation_shape[0] // 2), font, 1,
+                                      (0, 0, 255), 2, cv2.LINE_AA)
+
     def render(self, mode="human"):
         assert mode in ["human", "rgb_array"], "Invalid mode, must be either \"human\" or \"rgb_array\""
         if mode == "human":
             cv2.imshow("Game", self.canvas)
             cv2.waitKey(10)
+            if self.energy_left == 0 or self.pegasus not in self.elements:
+                cv2.waitKey(0)  # Wait for a key press to close the window
 
         elif mode == "rgb_array":
             return self.canvas
@@ -194,10 +209,11 @@ class PegasusScape(Env):
                     # Move the Tank up by 5 pts.
                     elem.move(0, -5)
 
-                # If the energy tank has collided with the pegasus.
+                # If the carrot has collided with the pegasus.
                 if self.has_collided(self.pegasus, elem):
-                    # Remove the energy tank from the env.
+                    # Remove the carrot from the env.
                     self.elements.remove(elem)
+                    self.carrots_eaten += 1
 
                     # Fill the energy tank of the pegasus to full.
                     self.energy_left = self.max_energy
