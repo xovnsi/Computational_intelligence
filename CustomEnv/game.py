@@ -27,7 +27,7 @@ class PegasusScape(Env):
 
         # Maximum energy pegasus can take at once
         self.max_energy = 1000
-        self.carrots_eaten = 0
+        self.carrots_count = 0
 
         # Permissible area of pegasus to be
         self.y_min = int(self.observation_shape[0] * 0.1)
@@ -81,9 +81,9 @@ class PegasusScape(Env):
         self.canvas = cv2.putText(self.canvas, text, (10, 20), font, 0.8, (0, 0, 0), 1, cv2.LINE_AA)
 
         # Check if the pegasus has taken a carrot
-        if self.energy_count > 0:
-            carrot_text = 'Carrots Eaten: {}'.format(self.carrots_eaten)
-            self.canvas = cv2.putText(self.canvas, carrot_text, (10, 50), font, 0.8, (0, 0, 0), 1, cv2.LINE_AA)
+        # if self.energy_count > 0:
+        carrot_text = 'Carrots Eaten: {}'.format(self.carrots_count)
+        self.canvas = cv2.putText(self.canvas, carrot_text, (10, 50), font, 0.8, (0, 0, 0), 1, cv2.LINE_AA)
 
         # Check if the game has ended
         if self.energy_left == 0 or self.pegasus not in self.elements:
@@ -92,12 +92,21 @@ class PegasusScape(Env):
                                       (self.observation_shape[1] // 2 - 50, self.observation_shape[0] // 2), font, 1,
                                       (0, 0, 255), 2, cv2.LINE_AA)
 
+        # Check if the Pegasus has eaten three carrots and won the game
+        if self.carrots_count == 3:
+            # self.elements.remove(self.pegasus)
+            self.canvas = cv2.putText(self.canvas, "Game Won!",
+                                      (self.observation_shape[1] // 2 - 50, self.observation_shape[0] // 2),
+                                      font, 1, (0, 255, 0), 2, cv2.LINE_AA)
+
     def render(self, mode="human"):
         assert mode in ["human", "rgb_array"], "Invalid mode, must be either \"human\" or \"rgb_array\""
+        
         if mode == "human":
             cv2.imshow("Game", self.canvas)
             cv2.waitKey(10)
-            if self.energy_left == 0 or self.pegasus not in self.elements:
+            
+            if self.energy_left == 0 or self.pegasus not in self.elements or self.carrots_count == 3:
                 cv2.waitKey(0)  # Wait for a key press to close the window
 
         elif mode == "rgb_array":
@@ -138,7 +147,7 @@ class PegasusScape(Env):
         self.energy_left -= 1
 
         # Reward for executing a step.
-        reward = 1
+        reward = 0
 
         # apply the action to the pegasus
         if action == 0:
@@ -153,7 +162,7 @@ class PegasusScape(Env):
             self.pegasus.move(0, 0)
 
         # Spawn a fire at the right edge with prob 0.01
-        if random.random() < 0.01:
+        if random.random() < 0.009:
             # Spawn a fire
             spawned_fire = FireBall("fire_{}".format(self.fire_count), self.x_max, self.x_min, self.y_max, self.y_min)
             self.fire_count += 1
@@ -163,15 +172,16 @@ class PegasusScape(Env):
             # sampled from the set of permissible values
             fire_x = self.x_max
             fire_y = random.randrange(self.y_min, self.y_max)
-            spawned_fire.set_position(self.x_max, fire_y)
+            spawned_fire.set_position(fire_x, fire_y)
 
             # Append the spawned fire to the elements currently present in Env.
             self.elements.append(spawned_fire)
 
-            # Spawn a energy at the bottom edge with prob 0.01
-        if random.random() < 0.01:
-            # Spawn a energy tank
-            spawned_energy = Energy("energy_{}".format(self.fire_count), self.x_max, self.x_min, self.y_max, self.y_min)
+        # Spawn a carrot at the bottom edge with prob 0.01
+        if random.random() < 0.03:
+            # Spawn a carrot
+            spawned_carrot = Carrot("carrot_{}".format(self.energy_count),
+                                    self.x_max, self.x_min, self.y_max, self.y_min)
             self.energy_count += 1
 
             # Compute the x,y co-ordinates of the position from where the energy tank has to be spawned
@@ -179,12 +189,12 @@ class PegasusScape(Env):
             # vertically, the position is on the bottom edge
             energy_x = random.randrange(self.x_min, self.x_max)
             energy_y = self.y_max
-            spawned_energy.set_position(energy_x, energy_y)
+            spawned_carrot.set_position(energy_x, energy_y)
 
             # Append the spawned energy tank to the elemetns currently present in the Env.
-            self.elements.append(spawned_energy)
+            self.elements.append(spawned_carrot)
 
-            # For elements in the Ev
+        # For elements in the Ev
         for elem in self.elements:
             if isinstance(elem, FireBall):
                 # If the fire has reached the left edge, remove it from the Env
@@ -201,21 +211,25 @@ class PegasusScape(Env):
                     reward = -10
                     self.elements.remove(self.pegasus)
 
-            if isinstance(elem, Energy):
-                # If the energy tank has reached the top, remove it from the Env
+            if isinstance(elem, Carrot):
+                # If the carrot has reached the top, remove it from the Env
                 if elem.get_position()[1] <= self.y_min:
                     self.elements.remove(elem)
                 else:
-                    # Move the Tank up by 5 pts.
+                    # Move the carrot up by 5 pts.
                     elem.move(0, -5)
 
                 # If the carrot has collided with the pegasus.
                 if self.has_collided(self.pegasus, elem):
                     # Remove the carrot from the env.
                     self.elements.remove(elem)
-                    self.carrots_eaten += 1
+                    self.carrots_count += 1
+                    reward += 10
 
-                    # Fill the energy tank of the pegasus to full.
+                    if self.carrots_count == 3:
+                        done = True
+
+                    # Fill the energy of the pegasus to full.
                     self.energy_left = self.max_energy
 
         # Increment the episodic return
@@ -277,9 +291,9 @@ class FireBall(Point):
         self.icon = cv2.resize(self.icon, (self.icon_h, self.icon_w))
 
 
-class Energy(Point):
+class Carrot(Point):
     def __init__(self, name, x_max, x_min, y_max, y_min):
-        super(Energy, self).__init__(name, x_max, x_min, y_max, y_min)
+        super(Carrot, self).__init__(name, x_max, x_min, y_max, y_min)
         self.icon = cv2.imread("carrot.png") / 255.0
         self.icon_w = 64
         self.icon_h = 64
