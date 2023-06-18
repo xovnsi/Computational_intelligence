@@ -6,7 +6,7 @@ import numpy as np
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.logger import configure
 
-env = gym.make('Pendulum-v1')
+# env = gym.make('Pendulum-v1')
 
 hyperparams = [
     {'learning_rate': 0.01, 'batch_size': 128, 'gamma': 0.8},
